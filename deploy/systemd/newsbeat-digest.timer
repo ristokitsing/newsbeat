@@ -1,0 +1,12 @@
+[Unit]
+Description=Run newsbeat-digest three times daily
+
+[Timer]
+OnCalendar=*-*-* 07:07:00 Europe/Tallinn
+OnCalendar=*-*-* 14:07:00 Europe/Tallinn
+OnCalendar=*-*-* 20:07:00 Europe/Tallinn
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

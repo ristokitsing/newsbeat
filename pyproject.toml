@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "newsbeat-digest"
+version = "0.2.0"
+description = "The newsbeat-digest AI news batch processor."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "anthropic>=0.109.1",
+    "beautifulsoup4>=4.13.4",
+    "feedparser>=6.0.12",
+    "httpx>=0.28.1",
+    "PyYAML>=6.0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+newsbeat-digest = "newsbeat_digest.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["newsbeat_digest*"]

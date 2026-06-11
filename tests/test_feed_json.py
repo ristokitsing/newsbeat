@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from newsbeat_digest.config import Settings
+from newsbeat_digest.db import Database
+from newsbeat_digest.models import BriefContent, RawItem
+from newsbeat_digest.publish import publish_digest
+
+
+CONTENT: BriefContent = {
+    "what_happened": "A provider released an AI model. Technical details were published.",
+    "why_it_matters": "The model could change practical workflows. Independent evaluation is still needed.",
+    "linkedin_angle": {
+        "hook": "The practical test starts after launch day.",
+        "points": ["Test quality", "Measure cost", "Check reliability"],
+    },
+    "instagram_carousel": {
+        "slides": ["New model", "Key change", "Practical impact", "Open question"],
+        "cta": "What would you test first?",
+    },
+    "caution": "Performance claims have not been independently verified.",
+}
+
+
+def test_digest_json_has_required_fields_and_publish_is_idempotent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, database = _briefed_database(tmp_path, monkeypatch)
+    now = datetime(2026, 6, 10, 15, tzinfo=ZoneInfo("Europe/Tallinn"))
+
+    first = publish_digest(settings, database, now=now)
+    second = publish_digest(settings, database, now=now)
+
+    payload = json.loads(first.json_path.read_text(encoding="utf-8"))
+    assert payload["version"] == 1
+    assert payload["timezone"] == "Europe/Tallinn"
+    assert len(payload["items"]) == 1
+    item = payload["items"][0]
+    assert {
+        "id",
+        "title",
+        "url",
+        "source",
+        "digest_date",
+        "digest_slot",
+        "what_happened",
+        "why_it_matters",
+        "linkedin_angle",
+        "instagram_carousel",
+        "caution",
+    } <= set(item)
+    assert len(item["linkedin_angle"]["points"]) == 3
+    assert len(item["instagram_carousel"]["slides"]) == 4
+    assert first.delivered_items == 1
+    assert second.delivered_items == 0
+    assert second.archive_path.exists()
+
+    with database.connect() as connection:
+        delivered = connection.execute(
+            "SELECT COUNT(*) FROM delivered_clusters"
+        ).fetchone()[0]
+    assert delivered == 1
+
+
+def _briefed_database(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Settings, Database]:
+    monkeypatch.setenv("AI_DIGEST_DATABASE_PATH", str(tmp_path / "digest.db"))
+    settings = Settings.from_env(tmp_path)
+    database = Database(settings.database_path)
+    database.initialize()
+    item_id = database.insert_item(
+        RawItem(
+            title="Provider releases a useful AI model",
+            url="https://example.com/model",
+            published_at="2026-06-10T08:00:00+00:00",
+            source="Example",
+        )
+    )
+    assert item_id is not None
+    with database.connect() as connection:
+        connection.execute(
+            """
+            UPDATE items
+            SET status = 'selected',
+                cluster_id = 'example-model',
+                llm_score = 8.7,
+                llm_category = 'models'
+            WHERE id = ?
+            """,
+            (item_id,),
+        )
+    brief_id = database.insert_brief(
+        item_id,
+        CONTENT,
+        digest_date=datetime(2026, 6, 10).date(),
+        digest_slot="pm",
+    )
+    assert brief_id is not None
+    return settings, database

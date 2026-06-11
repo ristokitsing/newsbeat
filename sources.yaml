@@ -1,0 +1,57 @@
+hackernews:
+  enabled: true
+  min_points_default: 30
+  min_points_strong_keyword: 10
+
+rss:
+  # Anthropic does not publish a working first-party RSS endpoint.
+  - name: Anthropic News
+    url: "https://www.anthropic.com/rss.xml"
+    enabled: false
+  # This endpoint could not be verified from the current environment.
+  - name: OpenAI News
+    url: "https://openai.com/news/rss.xml"
+    enabled: false
+  - name: Google DeepMind Blog
+    url: "https://deepmind.google/blog/rss.xml"
+    enabled: true
+  # Meta AI does not publish a working RSS endpoint at this URL.
+  - name: Meta AI Blog
+    url: "https://ai.meta.com/blog/rss/"
+    enabled: false
+  # This endpoint could not be verified from the current environment.
+  - name: Mistral News
+    url: "https://mistral.ai/news/rss.xml"
+    enabled: false
+  - name: Hugging Face Blog
+    url: "https://huggingface.co/blog/feed.xml"
+    enabled: true
+  - name: Import AI
+    url: "https://jack-clark.net/feed/"
+    enabled: true
+  # This endpoint could not be verified from the current environment.
+  - name: The Batch
+    url: "https://www.deeplearning.ai/the-batch/feed/"
+    enabled: false
+  - name: Ars Technica AI
+    url: "https://feeds.arstechnica.com/arstechnica/technology-lab"
+    enabled: true
+  - name: The Verge AI
+    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+    enabled: true
+  - name: EU AI / Digital Strategy
+    url: "https://digital-strategy.ec.europa.eu/en/rss.xml"
+    enabled: true
+
+reddit:
+  # Reddit returned HTTP 403 for unauthenticated JSON requests during local
+  # and container runs on 2026-06-11. Keep disabled until OAuth is added.
+  - subreddit: LocalLLaMA
+    enabled: false
+    min_score: 100
+  - subreddit: MachineLearning
+    enabled: false
+    min_score: 100
+
+arxiv:
+  enabled: false
