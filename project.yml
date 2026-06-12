@@ -1,4 +1,4 @@
-# Native app targets only. The Python/Docker backend remains outside app/.
+# Native app targets only. The Python/Docker backend is a separate repository.
 name: Newsbeat
 options:
   bundleIdPrefix: ee.risto.newsbeat
