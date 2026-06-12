@@ -7,6 +7,7 @@ import AppKit
 struct NewsbeatApp: App {
     @StateObject private var preferences: FeedPreferences
     @StateObject private var store: DigestStore
+    @StateObject private var postModel = PostGenerationModel()
 #if os(macOS)
     @StateObject private var hostCoordinator: MacHostCoordinator
 #endif
@@ -69,5 +70,7 @@ struct NewsbeatApp: App {
         ReaderView()
             .environmentObject(preferences)
             .environmentObject(store)
+            .environmentObject(postModel)
+            .task { await postModel.loadCache() }
     }
 }

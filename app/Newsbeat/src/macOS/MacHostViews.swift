@@ -13,18 +13,10 @@ struct MacHostSettingsSection: View {
             TextField("Python executable", text: $host.pythonPath)
                 .textFieldStyle(.roundedBorder)
 
-            SecureField("Anthropic API key (optional)", text: $host.apiKeyDraft)
-                .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Button("Save API key to Keychain") {
-                    host.saveAPIKey()
-                }
-                Button("Run now") {
-                    host.runNow()
-                }
-                .disabled(host.isRunning)
+            Button("Run now") {
+                host.runNow()
             }
+            .disabled(host.isRunning)
 
             LabeledContent("Status", value: host.statusMessage)
             if !host.lastOutput.isEmpty {
@@ -40,7 +32,7 @@ struct MacHostSettingsSection: View {
             }
 
             Text(
-                "Host mode checks at 08:00 and 17:00 local time and stops scheduling when the app exits. This personal macOS target intentionally runs without App Sandbox so it can launch the configured Python process."
+                "Host mode checks at 07:00, 11:00, 16:00, and 21:00 local time and stops scheduling when the app exits. It reuses the Anthropic API key from the Post generation section above. This personal macOS target intentionally runs without App Sandbox so it can launch the configured Python process."
             )
             .font(.caption)
             .foregroundStyle(.secondary)

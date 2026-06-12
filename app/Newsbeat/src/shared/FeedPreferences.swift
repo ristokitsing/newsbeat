@@ -27,6 +27,11 @@ final class FeedPreferences: ObservableObject {
         didSet { defaults.set(remoteURL, forKey: Keys.remoteURL) }
     }
 
+    /// Anthropic model used for on-demand post generation in the app.
+    @Published var postModel: String {
+        didSet { defaults.set(postModel, forKey: Keys.postModel) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -36,6 +41,8 @@ final class FeedPreferences: ObservableObject {
         ) ?? Self.defaultSourceMode
         localPath = defaults.string(forKey: Keys.localPath) ?? Self.defaultLocalPath
         remoteURL = defaults.string(forKey: Keys.remoteURL) ?? ""
+        postModel = defaults.string(forKey: Keys.postModel)
+            ?? PostGenerationService.defaultModel
     }
 
     func selectLocalFile(_ url: URL) {
@@ -81,6 +88,7 @@ final class FeedPreferences: ObservableObject {
         static let localPath = "feed.localPath"
         static let localBookmark = "feed.localBookmark"
         static let remoteURL = "feed.remoteURL"
+        static let postModel = "post.model"
     }
 
     private static var defaultSourceMode: SourceMode {

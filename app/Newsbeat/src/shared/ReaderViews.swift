@@ -53,7 +53,7 @@ struct ReaderView: View {
             }
         } detail: {
             if let item = store.selectedItem {
-                DigestDetailView(item: item)
+                DigestDetailView(item: item) { showingSettings = true }
             } else {
                 ContentUnavailableView(
                     "Select a story",
@@ -132,7 +132,13 @@ private struct StatusBar: View {
 
 struct DigestDetailView: View {
     let item: DigestItem
+    let openSettings: () -> Void
     @State private var copiedMessage: String?
+
+    init(item: DigestItem, openSettings: @escaping () -> Void) {
+        self.item = item
+        self.openSettings = openSettings
+    }
 
     var body: some View {
         ScrollView {
@@ -154,48 +160,15 @@ struct DigestDetailView: View {
                 DetailSection(title: "What happened", text: item.whatHappened)
                 DetailSection(title: "Why it matters", text: item.whyItMatters)
 
-                DraftSection(
-                    title: "LinkedIn angle",
-                    text: item.linkedInText,
-                    copyLabel: "Copy LinkedIn"
-                ) {
-                    copy(item.linkedInText, message: "LinkedIn draft copied")
-                }
-
-                DraftSection(
-                    title: "Instagram carousel",
-                    text: item.instagramText,
-                    copyLabel: "Copy Instagram"
-                ) {
-                    copy(item.instagramText, message: "Instagram draft copied")
-                }
+                PostSection(kind: .linkedIn, item: item, openSettings: openSettings, onCopy: copy)
+                PostSection(kind: .instagram, item: item, openSettings: openSettings, onCopy: copy)
 
                 DetailSection(title: "Caution", text: item.caution)
 
-                HStack {
-                    Link(destination: item.url) {
-                        Label("Open source article", systemImage: "safari")
-                    }
-                    .buttonStyle(.borderedProminent)
-
-#if os(iOS)
-                    ShareLink(
-                        item: item.linkedInText,
-                        subject: Text(item.title)
-                    ) {
-                        Label("Share LinkedIn", systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.bordered)
-
-                    ShareLink(
-                        item: item.instagramText,
-                        subject: Text(item.title)
-                    ) {
-                        Label("Share Instagram", systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.bordered)
-#endif
+                Link(destination: item.url) {
+                    Label("Open source article", systemImage: "safari")
                 }
+                .buttonStyle(.borderedProminent)
 
                 if let copiedMessage {
                     Label(copiedMessage, systemImage: "checkmark.circle.fill")
@@ -237,26 +210,129 @@ private struct DetailSection: View {
     }
 }
 
-private struct DraftSection: View {
-    let title: String
-    let text: String
-    let copyLabel: String
-    let copyAction: () -> Void
+/// A LinkedIn or Instagram draft section. Shows a pre-generated legacy draft, a
+/// cached on-demand draft (with Regenerate), or a Create button that calls
+/// Claude. Surfaces loading, error, and missing-API-key states.
+private struct PostSection: View {
+    let kind: PostKind
+    let item: DigestItem
+    let openSettings: () -> Void
+    let onCopy: (String, String) -> Void
+
+    @EnvironmentObject private var posts: PostGenerationModel
+    @EnvironmentObject private var preferences: FeedPreferences
+    @State private var phase: Phase = .idle
+
+    enum Phase: Equatable {
+        case idle
+        case loading
+        case error(String)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(title)
-                    .font(.title2.bold())
-                Spacer()
-                Button(copyLabel, systemImage: "doc.on.doc", action: copyAction)
-                    .buttonStyle(.bordered)
+            Text(kind.title)
+                .font(.title2.bold())
+            content
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let preGenerated = preGeneratedText {
+            draft(text: preGenerated, canRegenerate: false)
+        } else if let generated = posts.post(for: item, kind: kind) {
+            draft(text: generated.text(url: item.url), canRegenerate: true)
+        } else {
+            switch phase {
+            case .loading:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Generating \(kind.shortName) post…")
+                        .foregroundStyle(.secondary)
+                }
+            case let .error(message):
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                    Button("Retry", systemImage: "arrow.clockwise") { generate() }
+                        .buttonStyle(.bordered)
+                }
+            case .idle:
+                if hasAPIKey {
+                    Button("Create \(kind.shortName) post", systemImage: "sparkles") {
+                        generate()
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Add your Anthropic API key in Settings to generate a \(kind.shortName) post.")
+                            .foregroundStyle(.secondary)
+                        Button("Open Settings", systemImage: "gear") { openSettings() }
+                            .buttonStyle(.bordered)
+                    }
+                }
             }
+        }
+    }
+
+    private var preGeneratedText: String? {
+        kind == .linkedIn ? item.linkedInText : item.instagramText
+    }
+
+    private var hasAPIKey: Bool {
+        !KeychainStore.readAPIKey()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    @ViewBuilder private func draft(text: String, canRegenerate: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             Text(text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
                 .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
                 .textSelection(.enabled)
+            HStack {
+                Button("Copy \(kind.shortName)", systemImage: "doc.on.doc") {
+                    onCopy(text, "\(kind.shortName) draft copied")
+                }
+                .buttonStyle(.bordered)
+
+                if canRegenerate {
+                    if phase == .loading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Regenerate", systemImage: "arrow.clockwise") { generate() }
+                            .buttonStyle(.bordered)
+                    }
+                }
+
+#if os(iOS)
+                ShareLink(item: text, subject: Text(item.title)) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+#endif
+            }
+            if case let .error(message) = phase {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private func generate() {
+        phase = .loading
+        let apiKey = KeychainStore.readAPIKey()
+        let model = preferences.postModel
+        Task {
+            do {
+                try await posts.generate(kind, for: item, apiKey: apiKey, model: model)
+                phase = .idle
+            } catch {
+                phase = .error(error.localizedDescription)
+            }
         }
     }
 }
@@ -297,6 +373,8 @@ struct SettingsView: View {
                     }
                 }
 
+                PostGenerationSettingsSection()
+
 #if os(macOS)
                 MacHostSettingsSection()
 #endif
@@ -324,6 +402,57 @@ struct SettingsView: View {
                 return
             }
             preferences.selectLocalFile(url)
+        }
+    }
+}
+
+/// Shared on both platforms: stores the Anthropic API key in the Keychain (the
+/// same entry the macOS host coordinator reuses) and the post-generation model
+/// in preferences.
+struct PostGenerationSettingsSection: View {
+    @EnvironmentObject private var preferences: FeedPreferences
+    @State private var apiKeyDraft = ""
+    @State private var savedMessage: String?
+
+    var body: some View {
+        Section("Post generation") {
+            SecureField("Anthropic API key", text: $apiKeyDraft)
+                .textFieldStyle(.roundedBorder)
+#if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+#endif
+            TextField("Model", text: $preferences.postModel)
+                .textFieldStyle(.roundedBorder)
+#if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+#endif
+
+            Button("Save API key to Keychain") { saveKey() }
+
+            if let savedMessage {
+                Text(savedMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("The key is stored in this device's Keychain and used for on-demand LinkedIn and Instagram drafts. On macOS, the local newsbeat-digest host reuses the same Keychain entry.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear { apiKeyDraft = KeychainStore.readAPIKey() }
+    }
+
+    private func saveKey() {
+        let trimmed = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try KeychainStore.saveAPIKey(trimmed)
+            savedMessage = trimmed.isEmpty
+                ? "API key removed."
+                : "API key saved to Keychain."
+        } catch {
+            savedMessage = error.localizedDescription
         }
     }
 }

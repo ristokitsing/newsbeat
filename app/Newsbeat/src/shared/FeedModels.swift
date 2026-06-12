@@ -37,8 +37,11 @@ struct DigestItem: Codable, Identifiable, Hashable, Sendable {
     let score: Double?
     let whatHappened: String
     let whyItMatters: String
-    let linkedinAngle: LinkedInAngle
-    let instagramCarousel: InstagramCarousel
+    // The pipeline now publishes summary-only briefs; social drafts are
+    // generated on demand in the app. Legacy feeds inside the 7-day window
+    // still carry these, so they decode when present and stay nil otherwise.
+    let linkedinAngle: LinkedInAngle?
+    let instagramCarousel: InstagramCarousel?
     let caution: String
 
     enum CodingKeys: String, CodingKey {
@@ -59,27 +62,26 @@ struct DigestItem: Codable, Identifiable, Hashable, Sendable {
         case caution
     }
 
-    var linkedInText: String {
-        (
-            [linkedinAngle.hook]
-            + linkedinAngle.points.map { "• \($0)" }
-            + ["Source: \(url.absoluteString)"]
+    /// Formatted LinkedIn draft from the pre-generated angle, or nil when the
+    /// brief is summary-only (the app generates it on demand instead).
+    var linkedInText: String? {
+        guard let linkedinAngle else { return nil }
+        return formatLinkedIn(
+            hook: linkedinAngle.hook,
+            points: linkedinAngle.points,
+            url: url
         )
-            .joined(separator: "\n\n")
     }
 
-    var instagramText: String {
-        let slides = instagramCarousel.slides.enumerated().map {
-            "Slide \($0.offset + 1)\n\($0.element)"
-        }
-        return (
-            slides
-            + [
-                "CTA\n\(instagramCarousel.cta)",
-                "Source: \(url.absoluteString)",
-            ]
+    /// Formatted Instagram draft from the pre-generated carousel, or nil when
+    /// the brief is summary-only.
+    var instagramText: String? {
+        guard let instagramCarousel else { return nil }
+        return formatInstagram(
+            slides: instagramCarousel.slides,
+            cta: instagramCarousel.cta,
+            url: url
         )
-            .joined(separator: "\n\n")
     }
 }
 
@@ -91,4 +93,29 @@ struct LinkedInAngle: Codable, Hashable, Sendable {
 struct InstagramCarousel: Codable, Hashable, Sendable {
     let slides: [String]
     let cta: String
+}
+
+/// Shared LinkedIn formatting used by both pre-generated and on-demand drafts.
+func formatLinkedIn(hook: String, points: [String], url: URL) -> String {
+    (
+        [hook]
+        + points.map { "• \($0)" }
+        + ["Source: \(url.absoluteString)"]
+    )
+        .joined(separator: "\n\n")
+}
+
+/// Shared Instagram formatting used by both pre-generated and on-demand drafts.
+func formatInstagram(slides: [String], cta: String, url: URL) -> String {
+    let slideBlocks = slides.enumerated().map {
+        "Slide \($0.offset + 1)\n\($0.element)"
+    }
+    return (
+        slideBlocks
+        + [
+            "CTA\n\(cta)",
+            "Source: \(url.absoluteString)",
+        ]
+    )
+        .joined(separator: "\n\n")
 }

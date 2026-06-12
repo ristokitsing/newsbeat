@@ -27,7 +27,6 @@ final class MacHostCoordinator: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var statusMessage = "Local host is disabled."
     @Published private(set) var lastOutput = ""
-    @Published var apiKeyDraft = ""
 
     private let defaults: UserDefaults
     private let preferences: FeedPreferences
@@ -52,7 +51,6 @@ final class MacHostCoordinator: ObservableObject {
             ?? URL(fileURLWithPath: storedRepository)
                 .appending(path: ".venv/bin/python").path
         isEnabled = defaults.bool(forKey: Keys.enabled)
-        apiKeyDraft = KeychainStore.readAPIKey()
     }
 
     func start(store: DigestStore) {
@@ -61,7 +59,7 @@ final class MacHostCoordinator: ObservableObject {
         hasStarted = true
 
         if isEnabled {
-            statusMessage = "Watching the 08:00 and 17:00 local schedule."
+            statusMessage = "Watching the 07:00, 11:00, 16:00, and 21:00 local schedule."
             beginSchedule()
             checkLaunchStaleness()
         }
@@ -72,19 +70,6 @@ final class MacHostCoordinator: ObservableObject {
         scheduleTimer = nil
         if process?.isRunning == true {
             process?.terminate()
-        }
-    }
-
-    func saveAPIKey() {
-        do {
-            try KeychainStore.saveAPIKey(
-                apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-            statusMessage = apiKeyDraft.isEmpty
-                ? "Keychain API key removed. The CLI will use its environment."
-                : "Anthropic API key saved in Keychain."
-        } catch {
-            statusMessage = error.localizedDescription
         }
     }
 
@@ -207,10 +192,17 @@ final class MacHostCoordinator: ObservableObject {
         }
     }
 
+    // Four daytime runs, matching the systemd timer (07:07/11:07/16:07/21:07).
+    private static let scheduleHours = [7, 11, 16, 21]
+
+    private static func currentSlotHour(now: Date) -> Int? {
+        let hour = Calendar.current.component(.hour, from: now)
+        return scheduleHours.last { $0 <= hour }
+    }
+
     private static func currentSlotStart(now: Date = .now) -> Date {
         let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: now)
-        let slotHour = hour >= 17 ? 17 : (hour >= 8 ? 8 : 0)
+        let slotHour = currentSlotHour(now: now) ?? 0
         return calendar.date(
             bySettingHour: slotHour,
             minute: 0,
@@ -220,18 +212,9 @@ final class MacHostCoordinator: ObservableObject {
     }
 
     private static func currentScheduleToken(now: Date = .now) -> String? {
-        let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: now)
-        let slot: String
-        if hour >= 17 {
-            slot = "pm"
-        } else if hour >= 8 {
-            slot = "am"
-        } else {
-            return nil
-        }
+        guard let slotHour = currentSlotHour(now: now) else { return nil }
         let day = now.formatted(.iso8601.year().month().day())
-        return "\(day)-\(slot)"
+        return "\(day)-\(slotHour)"
     }
 
     private enum Keys {
