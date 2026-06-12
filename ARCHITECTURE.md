@@ -32,8 +32,11 @@ app/
     └── tests/         # Native app tests
 ```
 
-The app consumes `digest.json`; it does not collect news, call Anthropic,
-score stories, write SQLite data, or generate feeds.
+The app consumes `digest.json`; it does not collect news, run the pipeline,
+score stories, write SQLite data, or generate feeds. It does call the
+Anthropic Messages API directly for **on-demand** LinkedIn/Instagram drafts
+(button press in the detail view), using the key in the device Keychain and
+caching results locally — this is a per-item action, not the batch pipeline.
 
 The macOS-only host coordinator is an adapter at the app boundary. It can
 launch the separate Python CLI while the app is open, but the pipeline remains
@@ -71,6 +74,13 @@ digest.db               # Local/manual-recovery SQLite state
 ```
 
 All four paths are ignored by Git.
+
+The feed stays at `version: 1`. Items always carry the summary fields
+(`what_happened`, `why_it_matters`, `caution`); `linkedin_angle` and
+`instagram_carousel` are optional — new summary-only items omit them, while
+legacy items inside the seven-day window keep their pre-generated drafts. The
+app decodes both shapes, so the two sides ship in lockstep without a version
+bump.
 
 The app may read a local `feed/digest.json` or the same file over HTTPS. Moving
 from local host mode to VPS mode changes only the configured feed location.
