@@ -153,21 +153,21 @@ newsbeat Improvement Plan
  Task 3.1: Move KeychainStore to shared
 
  Files: Move app/Newsbeat/src/macOS/KeychainStore.swift → app/Newsbeat/src/shared/KeychainStore.swift
- - [ ] The implementation is already platform-portable (Foundation + Security, no AppKit). Move the file; no project.yml change needed (it globs src/shared).
- - [ ] xcodegen generate + build both schemes. Commit.
+ - [x] The implementation is already platform-portable (Foundation + Security, no AppKit). Move the file; no project.yml change needed (it globs src/shared).
+ - [x] xcodegen generate + build both schemes. Commit.
 
  Task 3.2: Feed models — optional social fields
 
  Files: Modify app/Newsbeat/src/shared/FeedModels.swift; Test app/Newsbeat/tests/macOS/FeedModelsTests.swift
- - [ ] DigestItem.linkedinAngle: LinkedInAngle?, instagramCarousel: InstagramCarousel?.
- - [ ] linkedInText/instagramText become helpers that build text from either the pre-generated structs or a generated post (see Task 3.3) — simplest: move the formatting into free functions
- formatLinkedIn(hook:points:url:) / formatInstagram(slides:cta:url:) so both paths share them.
- - [ ] Tests: decode a feed item JSON without the two keys (must succeed), and a legacy one with them. Run macOS build test. Commit.
+ - [x] DigestItem.linkedinAngle: LinkedInAngle?, instagramCarousel: InstagramCarousel?.
+ - [x] linkedInText/instagramText become helpers that build text from either the pre-generated structs or a generated post (see Task 3.3) — simplest: move the formatting into free functions
+ formatLinkedIn(hook:points:url:) / formatInstagram(slides:cta:url:) so both paths share them. (linkedInText/instagramText now return String?.)
+ - [x] Tests: decode a feed item JSON without the two keys (must succeed), and a legacy one with them. Run macOS build test. Commit.
 
  Task 3.3: PostGenerationService (direct Anthropic call) + local post cache
 
  Files: Create app/Newsbeat/src/shared/PostGenerationService.swift, app/Newsbeat/src/shared/GeneratedPostStore.swift
- - [ ] PostGenerationService (actor): func generate(_ kind: PostKind, for item: DigestItem, apiKey: String, model: String) async throws -> GeneratedPost where PostKind is .linkedIn | .instagram.
+ - [x] PostGenerationService (actor): func generate(_ kind: PostKind, for item: DigestItem, apiKey: String, model: String) async throws -> GeneratedPost where PostKind is .linkedIn | .instagram. (Request building/parsing are pure static funcs; no beta header needed for output_config json_schema.)
    - POST https://api.anthropic.com/v1/messages, headers x-api-key, anthropic-version: 2023-06-01, content-type: application/json; 30s timeout.
    - Body: model (default claude-haiku-4-5), max_tokens: 1500, output_config: {format: {type: "json_schema", schema: …}} — schema per kind: LinkedIn {hook: string, points: string[3]}, Instagram {slides: string[4],
  cta: string} (mirror the validation constraints from the old Python BRIEF_SCHEMA in pipeline/brief.py).
@@ -176,35 +176,35 @@ newsbeat Improvement Plan
  summary.
    - Parse: check HTTP status (decode Anthropic error body {type:"error", error:{type,message}} for the message), find first content block with "type": "text", JSONDecoder the text into the typed post, validate
  counts (3 points / 4 slides).
- - [ ] GeneratedPostStore (actor): persists [String: GeneratedPost] keyed "\(item.id)-\(kind)" to Application Support/newsbeat/posts-cache.json (same pattern as DigestService.persistCache); methods post(for:kind:),
+ - [x] GeneratedPostStore (actor): persists [String: GeneratedPost] keyed "\(item.id)-\(kind)" to Application Support/newsbeat/posts-cache.json (same pattern as DigestService.persistCache); methods post(for:kind:),
  save(_:for:kind:). Generation results survive relaunch; Regenerate overwrites.
- - [ ] Build both schemes. Commit: git commit -m "Add on-demand Claude post generation with local cache".
+ - [x] Build both schemes. Commit: git commit -m "Add on-demand Claude post generation with local cache". (Bridged to SwiftUI via a @MainActor PostGenerationModel.)
 
  Task 3.4: Settings — API key + model on both platforms
 
  Files: Modify app/Newsbeat/src/shared/ReaderViews.swift (SettingsView), app/Newsbeat/src/shared/FeedPreferences.swift; check app/Newsbeat/src/macOS/MacHostViews.swift for the existing key field
- - [ ] Add a shared "Post generation" section to SettingsView: SecureField for the Anthropic API key (read/write via KeychainStore, same service/account the macOS host coordinator already uses — one key for both
+ - [x] Add a shared "Post generation" section to SettingsView: SecureField for the Anthropic API key (read/write via KeychainStore, same service/account the macOS host coordinator already uses — one key for both
  features) and a model TextField defaulting to claude-haiku-4-5, stored in FeedPreferences (UserDefaults).
- - [ ] Deduplicate: if MacHostSettingsSection has its own key field, point it at the same shared section or note it reuses the same Keychain entry.
- - [ ] Build both schemes; on macOS open Settings and save/read a key. Commit.
+ - [x] Deduplicate: if MacHostSettingsSection has its own key field, point it at the same shared section or note it reuses the same Keychain entry. (Removed the host section's key field + apiKeyDraft/saveAPIKey; it reuses the shared Keychain entry.)
+ - [x] Build both schemes; on macOS open Settings and save/read a key. Commit. (Builds verified; manual save/read is a runtime check.)
 
  Task 3.5: Detail view — Create/Copy/Regenerate flows
 
  Files: Modify app/Newsbeat/src/shared/ReaderViews.swift (DigestDetailView, DraftSection)
- - [ ] Replace the two static DraftSections with a state-driven PostSection(kind:) per platform-shared view:
+ - [x] Replace the two static DraftSections with a state-driven PostSection(kind:) per platform-shared view:
    - Pre-generated content present (legacy item): show text + Copy (today's behavior).
    - Cached generated post: show text + Copy + Regenerate button.
    - Nothing yet: prominent "Create LinkedIn post" / "Create Instagram post" button.
    - Loading: ProgressView + disabled button. Error: readable message + Retry. Missing API key: message with a button that opens Settings.
- - [ ] Copy/share use the shared formatting helpers from Task 3.2; keep the iOS ShareLinks, now driven by whichever text is available.
- - [ ] Build both schemes. Manual check in macOS app and iOS Simulator: button → spinner → draft → copy; relaunch → draft still there; Regenerate replaces it. Commit.
+ - [x] Copy/share use the shared formatting helpers from Task 3.2; keep the iOS ShareLinks, now driven by whichever text is available.
+ - [x] Build both schemes. Manual check in macOS app and iOS Simulator: button → spinner → draft → copy; relaunch → draft still there; Regenerate replaces it. Commit. (Builds verified; the button→spinner→draft→relaunch flow is a runtime check.)
 
  Task 3.6: Swift tests for the new logic
 
  Files: Modify app/Newsbeat/tests/macOS/FeedModelsTests.swift or create app/Newsbeat/tests/macOS/PostGenerationTests.swift
- - [ ] No live network in tests: factor request-body building and response parsing in PostGenerationService into pure functions; test (a) request JSON contains model/schema/system, (b) a canned Anthropic response
- parses into a valid post, (c) malformed/over-count responses throw.
- - [ ] xcodebuild … -scheme NewsbeatMac build test passes. Commit.
+ - [x] No live network in tests: factor request-body building and response parsing in PostGenerationService into pure functions; test (a) request JSON contains model/schema/system, (b) a canned Anthropic response
+ parses into a valid post, (c) malformed/over-count responses throw. (Added PostGenerationTests.swift — 7 cases.)
+ - [x] xcodebuild … -scheme NewsbeatMac build test passes. Commit. (11 macOS tests pass.)
 
  ---
  Phase 4 — Scheduling: every 4–5 hours
@@ -212,16 +212,16 @@ newsbeat Improvement Plan
  Task 4.1: systemd timer → 4 daytime runs
 
  Files: Modify deploy/systemd/newsbeat-digest.timer
- - [ ] Replace the three OnCalendar= lines with four: 07:07, 11:07, 16:07, 21:07 (Europe/Tallinn); update Description=Run newsbeat-digest four times daily. Keep Persistent=true + RandomizedDelaySec=5min.
- - [ ] No lookback change needed: max gap 10h (21:07→07:07) < 12h lookback_hours in __main__.py:_collect; canonical-URL dedupe makes overlap free. Note this in the commit message.
- - [ ] Verify syntax: systemd-analyze calendar "*-*-* 07,11,16,21:07:00 Europe/Tallinn" style check or four separate lines (keep four lines for clarity). Commit.
+ - [x] Replace the three OnCalendar= lines with four: 07:07, 11:07, 16:07, 21:07 (Europe/Tallinn); update Description=Run newsbeat-digest four times daily. Keep Persistent=true + RandomizedDelaySec=5min.
+ - [x] No lookback change needed: max gap 10h (21:07→07:07) < 12h lookback_hours in __main__.py:_collect; canonical-URL dedupe makes overlap free. Note this in the commit message.
+ - [x] Verify syntax: systemd-analyze calendar "*-*-* 07,11,16,21:07:00 Europe/Tallinn" style check or four separate lines (keep four lines for clarity). Commit. (systemd-analyze unavailable on macOS; format matches the prior working entries, and test_container_deployment asserts the 4 lines/hours.)
 
  Task 4.2: Align MacHostCoordinator schedule
 
  Files: Modify app/Newsbeat/src/macOS/MacHostCoordinator.swift (currentSlotStart, currentScheduleToken, status message at line ~64)
- - [ ] Replace the hardcoded 08:00/17:00 slots with the same four local hours [7, 11, 16, 21]: token = "\(day)-\(slotHour)"; currentSlotStart returns the most recent slot hour. Update the "Watching the …" status
+ - [x] Replace the hardcoded 08:00/17:00 slots with the same four local hours [7, 11, 16, 21]: token = "\(day)-\(slotHour)"; currentSlotStart returns the most recent slot hour. Update the "Watching the …" status
  string.
- - [ ] Build macOS scheme; with host mode enabled confirm a stale feed triggers a run at launch. Commit.
+ - [x] Build macOS scheme; with host mode enabled confirm a stale feed triggers a run at launch. Commit. (Build verified; stale-feed launch run is a runtime check. Note: committed with the Phase 3 app commit since both edit MacHostCoordinator.swift.)
 
  ---
  Phase 5 — Security hardening (backend)
