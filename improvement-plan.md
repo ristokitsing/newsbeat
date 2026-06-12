@@ -229,36 +229,36 @@ newsbeat Improvement Plan
  Task 5.1: Download size cap in HttpClient
 
  Files: Modify newsbeat_digest/sources/base.py (HttpClient.get); Test tests/test_sources.py
- - [ ] Cap response bodies at MAX_RESPONSE_BYTES = 5_000_000: use self._client.stream("GET", …), raise for status, accumulate chunks until the cap, and raise a clear error if exceeded (protects the 384MB worker from
+ - [x] Cap response bodies at MAX_RESPONSE_BYTES = 5_000_000: use self._client.stream("GET", …), raise for status, accumulate chunks until the cap, and raise a clear error if exceeded (protects the 384MB worker from
  a hostile/huge article URL; applies to all sources and pipeline/article.py automatically since both use this client). Preserve the existing retry-once and return an httpx.Response-compatible object — simplest:
  build the response via httpx.Response(status_code, content=collected, …) or return (bytes, headers)-style wrapper; pick whichever keeps rss.py/reddit.py/hn.py/article.py call sites (response.text, .json())
- unchanged.
- - [ ] Test with a mocked transport streaming > cap → error; normal body → unchanged behavior. pytest tests/test_sources.py -v. Commit.
+ unchanged. (Rebuilds an httpx.Response from buffered identity-decoded bytes, stripping content-encoding/length; too-large fails fast without retry.)
+ - [x] Test with a mocked transport streaming > cap → error; normal body → unchanged behavior. pytest tests/test_sources.py -v. Commit.
 
  Task 5.2: Worker container lockdown
 
  Files: Modify compose.yaml (worker service)
- - [ ] Add to newsbeat-digest service: read_only: true, tmpfs: ["/tmp:size=16m"], cap_drop: [ALL], security_opt: ["no-new-privileges:true"]. Writable paths are already the three bind mounts (/data, /app/feed,
+ - [x] Add to newsbeat-digest service: read_only: true, tmpfs: ["/tmp:size=16m"], cap_drop: [ALL], security_opt: ["no-new-privileges:true"]. Writable paths are already the three bind mounts (/data, /app/feed,
  /app/digests).
- - [ ] Verify locally: docker compose run --rm newsbeat-digest collect completes (or --help if no key configured). Commit.
+ - [x] Verify locally: docker compose run --rm newsbeat-digest collect completes (or --help if no key configured). Commit. (Ran collect under the flags against a throwaway /tmp DB — exit 0, 9 items collected; added a test_compose_hardens_containers regression test.)
 
  Task 5.3: nginx hardening
 
  Files: Modify compose.yaml (static-feed), deploy/nginx.conf
- - [ ] Switch image to nginxinc/nginx-unprivileged:1.29-alpine (no root master, no setuid caps needed), then add cap_drop: [ALL], security_opt: ["no-new-privileges:true"]. Update nginx.conf for the unprivileged
+ - [x] Switch image to nginxinc/nginx-unprivileged:1.29-alpine (no root master, no setuid caps needed), then add cap_drop: [ALL], security_opt: ["no-new-privileges:true"]. Update nginx.conf for the unprivileged
  image: pid /tmp/nginx.pid;, cache/temp paths under /tmp, adjust the tmpfs entries accordingly (/tmp:size=16m), keep listen 8080.
- - [ ] In nginx.conf http/server block: server_tokens off;, add_header X-Content-Type-Options "nosniff" always;, add_header Referrer-Policy "no-referrer" always;, charset utf-8;. Keep GET/HEAD-only and try_files
- $uri =404.
- - [ ] Verify: docker compose up -d static-feed && curl -sI http://127.0.0.1:8088/feed/digest.json shows the headers, no nginx version, 200. Commit.
+ - [x] In nginx.conf http/server block: server_tokens off;, add_header X-Content-Type-Options "nosniff" always;, add_header Referrer-Policy "no-referrer" always;, charset utf-8;. Keep GET/HEAD-only and try_files
+ $uri =404. (Security + cache add_headers kept together in the location block so they aren't dropped by inheritance.)
+ - [x] Verify: docker compose up -d static-feed && curl -sI http://127.0.0.1:8088/feed/digest.json shows the headers, no nginx version, 200. Commit. (Validated on a throwaway port 8089 — 8088 was held by the user's old newsbeat-feed-1 container; 200 + nosniff/no-referrer headers + Server: nginx with no version + POST rejected 403. Added test_nginx_config_is_hardened_and_unprivileged.)
 
  Task 5.4: Document TLS proxy, .env perms, key handling
 
  Files: Modify README.md (VPS section), deploy/README.md
- - [ ] Document fronting 127.0.0.1:8088 with a host reverse proxy for the public feed URL — include a complete Caddy example (news.example.invalid { reverse_proxy 127.0.0.1:8088 }, automatic TLS) and note the
+ - [x] Document fronting 127.0.0.1:8088 with a host reverse proxy for the public feed URL — include a complete Caddy example (news.example.invalid { reverse_proxy 127.0.0.1:8088 }, automatic TLS) and note the
  certbot/nginx alternative; instruct setting AI_DIGEST_PAGES_URL to the public URL. Use a documented placeholder domain (the real URL is unknown).
- - [ ] Document chmod 600 .env on the VPS, that the key never appears in images or compose files (env_file only on the worker), and that the feed is intentionally public, non-secret content (note basic-auth at the
+ - [x] Document chmod 600 .env on the VPS, that the key never appears in images or compose files (env_file only on the worker), and that the feed is intentionally public, non-secret content (note basic-auth at the
  proxy as an option the user can add later).
- - [ ] Note the limits of systemd-unit hardening here (the unit just invokes docker compose; isolation comes from the container settings in 5.2/5.3). Commit.
+ - [x] Note the limits of systemd-unit hardening here (the unit just invokes docker compose; isolation comes from the container settings in 5.2/5.3). Commit. (README VPS section + deploy/README.md.)
 
  ---
  Phase 6 — Documentation + final verification
@@ -266,26 +266,26 @@ newsbeat Improvement Plan
  Task 6.1: Update docs for all changed behavior
 
  Files: Modify README.md, app/README.md, ARCHITECTURE.md (feed contract section), .env.example if needed
- - [ ] Feed contract: linkedin_angle/instagram_carousel now optional; version stays 1.
- - [ ] New workflow: pipeline = collect/score/summarize/publish 4×/day; posts generated on demand in the app; where the API key lives on each platform (Keychain) and that the macOS host coordinator + post generation
+ - [x] Feed contract: linkedin_angle/instagram_carousel now optional; version stays 1. (README, ARCHITECTURE.md.)
+ - [x] New workflow: pipeline = collect/score/summarize/publish 4×/day; posts generated on demand in the app; where the API key lives on each platform (Keychain) and that the macOS host coordinator + post generation
  share one Keychain entry.
- - [ ] Claude API usage & cost section: scoring (Haiku, batches of 30, titles/snippets only, ~2–5 calls/run), summaries (Haiku, ~6–8 calls/run, article text truncated to 12k chars), on-demand posts (Haiku, 1
+ - [x] Claude API usage & cost section: scoring (Haiku, batches of 30, titles/snippets only, ~2–5 calls/run), summaries (Haiku, ~6–8 calls/run, article text truncated to 12k chars), on-demand posts (Haiku, 1
  call/button press, ≈$0.003). Estimated pipeline cost ≈ $0.05–0.08/run → ≈ $0.20–0.32/day at 4 runs (within the <$0.10/run rule). Models configurable: AI_DIGEST_SCORE_MODEL, AI_DIGEST_BRIEF_MODEL, app Settings.
- - [ ] New timer cadence + how to apply on the VPS (cp deploy/systemd/* /etc/systemd/system/ && systemctl daemon-reload && systemctl restart newsbeat-digest.timer).
- - [ ] Commit.
+ - [x] New timer cadence + how to apply on the VPS (cp deploy/systemd/* /etc/systemd/system/ && systemctl daemon-reload && systemctl restart newsbeat-digest.timer).
+ - [x] Commit.
 
  Task 6.2: End-to-end verification
 
- - [ ] pytest — all green.
- - [ ] python -m newsbeat_digest run (with ANTHROPIC_API_KEY set) — completes; feed/digest.json valid, new items have no social keys, items ≤7 days only; run twice → no duplicate delivered items.
- - [ ] cd app/Newsbeat && xcodegen generate
- - [ ] xcodebuild -project Newsbeat.xcodeproj -scheme NewsbeatMac -destination 'platform=macOS' build test
- - [ ] xcodebuild -project Newsbeat.xcodeproj -scheme NewsbeatIOS -destination 'platform=iOS Simulator,name=iPhone 16' build
+ - [x] pytest — all green. (57 passed.)
+ - [ ] python -m newsbeat_digest run (with ANTHROPIC_API_KEY set) — completes; feed/digest.json valid, new items have no social keys, items ≤7 days only; run twice → no duplicate delivered items. (NOT RUN by the agent: makes billable Anthropic calls and mutates the real data/digest.db. Back up data/digest.db first, then run manually. `collect` alone was validated in-container, exit 0.)
+ - [x] cd app/Newsbeat && xcodegen generate
+ - [x] xcodebuild -project Newsbeat.xcodeproj -scheme NewsbeatMac -destination 'platform=macOS' build test (11 tests pass)
+ - [x] xcodebuild -project Newsbeat.xcodeproj -scheme NewsbeatIOS -destination 'platform=iOS Simulator,name=iPhone 17' build (iPhone 16 not installed; used iPhone 17 — BUILD SUCCEEDED)
  - [ ] Manual on macOS app + iOS Simulator: load feed (local file on macOS, remote/local on iOS), open story, Create LinkedIn post → draft appears → Copy; kill app, relaunch offline → cached feed + cached post still
- present; Regenerate works; missing-key state shows guidance.
- - [ ] macOS host mode: enable, Run Now → pipeline runs, feed reloads; iOS has no pipeline affordances.
- - [ ] docker compose build && docker compose run --rm newsbeat-digest run locally under the new hardening flags.
- - [ ] Final commit; leave repo on main with clean status.
+ present; Regenerate works; missing-key state shows guidance. (RUNTIME/manual — needs a real API key in Keychain; logic covered by unit tests.)
+ - [ ] macOS host mode: enable, Run Now → pipeline runs, feed reloads; iOS has no pipeline affordances. (RUNTIME/manual.)
+ - [x] docker compose build && docker compose run --rm newsbeat-digest run locally under the new hardening flags. (Built; validated with `collect` against a throwaway /tmp DB to avoid billable calls + real-state mutation. The full `run` is the billable step left for manual execution above.)
+ - [x] Final commit; leave repo on main with clean status.
 
  ---
  Risks & limitations
