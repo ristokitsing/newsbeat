@@ -30,7 +30,7 @@ def test_compose_caps_batch_and_static_server_resources() -> None:
     assert feed["read_only"] == "true"
 
 
-def test_systemd_timer_runs_three_times_in_tallinn() -> None:
+def test_systemd_timer_runs_four_times_in_tallinn() -> None:
     timer = (ROOT / "deploy/systemd/newsbeat-digest.timer").read_text(
         encoding="utf-8"
     )
@@ -38,8 +38,10 @@ def test_systemd_timer_runs_three_times_in_tallinn() -> None:
         encoding="utf-8"
     )
 
-    assert timer.count("OnCalendar=") == 3
-    assert timer.count("Europe/Tallinn") == 3
+    assert timer.count("OnCalendar=") == 4
+    assert timer.count("Europe/Tallinn") == 4
+    for hour in ("07:07", "11:07", "16:07", "21:07"):
+        assert f"{hour}:00 Europe/Tallinn" in timer
     assert "Persistent=true" in timer
     assert "docker compose run --rm newsbeat-digest" in service
     assert "flock -n /run/lock/newsbeat-digest.lock" in service
