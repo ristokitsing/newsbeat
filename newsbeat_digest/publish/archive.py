@@ -44,29 +44,44 @@ def render_markdown_digest(
                 "",
                 brief.why_it_matters,
                 "",
-                "### LinkedIn angle",
-                "",
-                f"**{brief.linkedin_hook}**",
-                "",
             ]
         )
-        lines.extend(f"- {point}" for point in brief.linkedin_points)
+        # Legacy briefs may still carry pre-generated social drafts; new
+        # summary-only briefs omit these sections.
+        if brief.linkedin_hook is not None and brief.linkedin_points is not None:
+            lines.extend(
+                [
+                    "### LinkedIn angle",
+                    "",
+                    f"**{brief.linkedin_hook}**",
+                    "",
+                ]
+            )
+            lines.extend(f"- {point}" for point in brief.linkedin_points)
+            lines.append("")
+        if (
+            brief.instagram_slides is not None
+            and brief.instagram_cta is not None
+        ):
+            lines.extend(
+                [
+                    "### Instagram carousel",
+                    "",
+                ]
+            )
+            lines.extend(
+                f"{index}. {slide}"
+                for index, slide in enumerate(brief.instagram_slides, start=1)
+            )
+            lines.extend(
+                [
+                    "",
+                    f"CTA: {brief.instagram_cta}",
+                    "",
+                ]
+            )
         lines.extend(
             [
-                "",
-                "### Instagram carousel",
-                "",
-            ]
-        )
-        lines.extend(
-            f"{index}. {slide}"
-            for index, slide in enumerate(brief.instagram_slides, start=1)
-        )
-        lines.extend(
-            [
-                "",
-                f"CTA: {brief.instagram_cta}",
-                "",
                 f"**Caution:** {brief.caution}",
                 "",
                 "---",

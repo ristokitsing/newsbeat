@@ -26,7 +26,7 @@ def render_json_feed(
 def _feed_item(entry: PublishedItem) -> dict[str, object]:
     item = entry.item
     brief = entry.brief
-    return {
+    payload: dict[str, object] = {
         "id": item.id,
         "title": item.title,
         "url": item.url,
@@ -39,13 +39,18 @@ def _feed_item(entry: PublishedItem) -> dict[str, object]:
         "score": item.llm_score,
         "what_happened": brief.what_happened,
         "why_it_matters": brief.why_it_matters,
-        "linkedin_angle": {
-            "hook": brief.linkedin_hook,
-            "points": list(brief.linkedin_points),
-        },
-        "instagram_carousel": {
-            "slides": list(brief.instagram_slides),
-            "cta": brief.instagram_cta,
-        },
         "caution": brief.caution,
     }
+    # Legacy briefs inside the 7-day window keep their pre-generated drafts;
+    # summary-only briefs omit these keys (the app generates them on demand).
+    if brief.linkedin_hook is not None and brief.linkedin_points is not None:
+        payload["linkedin_angle"] = {
+            "hook": brief.linkedin_hook,
+            "points": list(brief.linkedin_points),
+        }
+    if brief.instagram_slides is not None and brief.instagram_cta is not None:
+        payload["instagram_carousel"] = {
+            "slides": list(brief.instagram_slides),
+            "cta": brief.instagram_cta,
+        }
+    return payload
