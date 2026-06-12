@@ -69,6 +69,63 @@ def test_digest_json_has_required_fields_and_publish_is_idempotent(
     assert delivered == 1
 
 
+def test_published_feed_retains_seven_digest_dates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_DIGEST_DATABASE_PATH", str(tmp_path / "digest.db"))
+    settings = Settings.from_env(tmp_path)
+    database = Database(settings.database_path)
+    database.initialize()
+    for day in range(1, 9):
+        digest_date = datetime(2026, 6, day).date()
+        item_id = database.insert_item(
+            RawItem(
+                title=f"Story from June {day}",
+                url=f"https://example.com/story-{day}",
+                published_at=f"2026-06-{day:02d}T08:00:00+00:00",
+                source="Example",
+            )
+        )
+        assert item_id is not None
+        with database.connect() as connection:
+            connection.execute(
+                """
+                UPDATE items
+                SET status = 'selected',
+                    cluster_id = ?,
+                    llm_score = 8.0,
+                    llm_category = 'models'
+                WHERE id = ?
+                """,
+                (f"story-{day}", item_id),
+            )
+        assert database.insert_brief(
+            item_id,
+            CONTENT,
+            digest_date=digest_date,
+            digest_slot="am",
+        )
+
+    result = publish_digest(
+        settings,
+        database,
+        now=datetime(
+            2026,
+            6,
+            8,
+            15,
+            tzinfo=ZoneInfo("Europe/Tallinn"),
+        ),
+    )
+    payload = json.loads(result.json_path.read_text(encoding="utf-8"))
+
+    assert {item["digest_date"] for item in payload["items"]} == {
+        f"2026-06-{day:02d}" for day in range(2, 9)
+    }
+    assert database.count_items() == 8
+
+
 def _briefed_database(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

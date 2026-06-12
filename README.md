@@ -138,14 +138,17 @@ guard. A live scoring/briefing run additionally requires a configured
 ## Shared feed contract
 
 - `feed/digest.json` is the source of truth for the SwiftUI app and
-  contains approximately 30 days of delivered items.
-- `feed/digest.xml` is an RSS 2.0 representation.
+  contains the current digest date and the previous six digest dates.
+- `feed/digest.xml` is an RSS 2.0 representation of the same seven-day
+  history.
 - `digests/YYYY-MM-DD-am.md` and `digests/YYYY-MM-DD-pm.md` are readable
   run archives.
 
 `feed/`, `digests/`, `data/`, and local `digest.db` are generated runtime
 state and are intentionally ignored by Git. Persist or back them up on the
 machine that runs `newsbeat-digest`; do not treat them as source files.
+SQLite records and Markdown archives are not deleted when items leave the
+rolling seven-day app feed.
 
 Set `AI_DIGEST_PAGES_URL` before public publishing. When it is absent, the RSS
 channel uses `https://example.invalid/newsbeat` as an explicit placeholder.

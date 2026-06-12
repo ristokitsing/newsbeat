@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 from newsbeat_digest.models import RawItem
-from newsbeat_digest.sources import fetch_all
+from newsbeat_digest.sources import fetch_all, load_sources
 from newsbeat_digest.sources.base import HttpClient, Source
 from newsbeat_digest.sources.hn import HackerNewsSource
 from newsbeat_digest.sources.reddit import RedditSource
@@ -191,3 +192,25 @@ def test_failed_source_does_not_block_other_sources() -> None:
 
     assert len(result.items) == 1
     assert result.failed_sources == ("broken",)
+
+
+def test_source_configuration_enables_validated_feeds() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    sources = load_sources(
+        project_root / "sources.yaml",
+        _client(
+            httpx.MockTransport(
+                lambda request: httpx.Response(200, request=request)
+            )
+        ),
+        lookback_hours=12,
+    )
+
+    assert {
+        "Google Research",
+        "Microsoft Research",
+        "NVIDIA Developer Blog",
+        "AWS Machine Learning",
+        "MIT Technology Review AI",
+        "IEEE Spectrum AI",
+    } <= {source.name for source in sources}

@@ -15,6 +15,9 @@ from newsbeat_digest.publish.feed_json import render_json_feed
 from newsbeat_digest.publish.feed_rss import render_rss_feed
 
 
+FEED_HISTORY_DAYS = 7
+
+
 @dataclass(frozen=True, slots=True)
 class PublishResult:
     feed_items: int
@@ -36,7 +39,7 @@ def publish_digest(
     generated_at = local_now.astimezone(UTC)
     digest_date = local_now.date()
     digest_slot = "am" if local_now.hour < 12 else "pm"
-    since_date = digest_date - timedelta(days=29)
+    since_date = digest_date - timedelta(days=FEED_HISTORY_DAYS - 1)
 
     feed_items = database.list_published_items(
         since_date=since_date,

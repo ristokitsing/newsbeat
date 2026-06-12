@@ -15,6 +15,18 @@ rss:
   - name: Google DeepMind Blog
     url: "https://deepmind.google/blog/rss.xml"
     enabled: true
+  - name: Google Research
+    url: "https://research.google/blog/rss/"
+    enabled: true
+  - name: Microsoft Research
+    url: "https://www.microsoft.com/en-us/research/feed/"
+    enabled: true
+  - name: NVIDIA Developer Blog
+    url: "https://developer.nvidia.com/blog/feed/"
+    enabled: true
+  - name: AWS Machine Learning
+    url: "https://aws.amazon.com/blogs/machine-learning/feed/"
+    enabled: true
   # Meta AI does not publish a working RSS endpoint at this URL.
   - name: Meta AI Blog
     url: "https://ai.meta.com/blog/rss/"
@@ -38,6 +50,12 @@ rss:
     enabled: true
   - name: The Verge AI
     url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+    enabled: true
+  - name: MIT Technology Review AI
+    url: "https://www.technologyreview.com/topic/artificial-intelligence/feed/"
+    enabled: true
+  - name: IEEE Spectrum AI
+    url: "https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss"
     enabled: true
   - name: EU AI / Digital Strategy
     url: "https://digital-strategy.ec.europa.eu/en/rss.xml"
