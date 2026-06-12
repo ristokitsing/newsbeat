@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class ItemStatus(StrEnum):
@@ -54,10 +54,13 @@ class Brief:
     item_id: int
     what_happened: str
     why_it_matters: str
-    linkedin_hook: str
-    linkedin_points: tuple[str, ...]
-    instagram_slides: tuple[str, ...]
-    instagram_cta: str
+    # Social drafts are now generated on demand in the app. Legacy rows still
+    # inside the 7-day feed window keep their pre-generated drafts; newer
+    # summary-only briefs leave these as None.
+    linkedin_hook: str | None
+    linkedin_points: tuple[str, ...] | None
+    instagram_slides: tuple[str, ...] | None
+    instagram_cta: str | None
     caution: str
     digest_date: str
     digest_slot: str
@@ -77,9 +80,11 @@ class InstagramCarousel(TypedDict):
 class BriefContent(TypedDict):
     what_happened: str
     why_it_matters: str
-    linkedin_angle: LinkedInAngle
-    instagram_carousel: InstagramCarousel
     caution: str
+    # The pipeline now generates summary-only briefs, so the social drafts are
+    # optional. They remain in the type to decode legacy briefs and feeds.
+    linkedin_angle: NotRequired[LinkedInAngle]
+    instagram_carousel: NotRequired[InstagramCarousel]
 
 
 @dataclass(frozen=True, slots=True)
