@@ -32,6 +32,20 @@ POLICY_SIGNALS = (
 )
 SCORE_BATCH_SIZE = 30
 
+# Opus 4.7+ and Fable reject the `temperature` parameter (HTTP 400). Haiku and
+# Sonnet accept it, and we rely on temperature=0 for deterministic output, so
+# only omit it when the configured model is one of the newer families.
+_NO_TEMPERATURE_PREFIXES = (
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-fable",
+)
+
+
+def supports_temperature(model: str) -> bool:
+    """Return True when the model accepts the `temperature` parameter."""
+    return not model.startswith(_NO_TEMPERATURE_PREFIXES)
+
 SCORE_SCHEMA: dict[str, Any] = {
     "type": "array",
     "items": {
@@ -89,13 +103,17 @@ class AnthropicScoreClient:
                 message = self._client.messages.create(
                     model=self._model,
                     max_tokens=2_500,
-                    temperature=0,
                     output_config={
                         "format": {
                             "type": "json_schema",
                             "schema": SCORE_SCHEMA,
                         }
                     },
+                    **(
+                        {"temperature": 0}
+                        if supports_temperature(self._model)
+                        else {}
+                    ),
                     system=(
                         "You rank AI news for one reader. Use only the supplied "
                         "title, snippet, source, and interest profile. Return "

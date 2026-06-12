@@ -8,6 +8,7 @@ from newsbeat_digest.pipeline.score import (
     SCORE_SCHEMA,
     AnthropicScoreClient,
     apply_policy_boost,
+    supports_temperature,
     validate_score_results,
 )
 
@@ -119,3 +120,48 @@ def _item(*, title: str) -> Item:
         created_at="2026-06-10T00:00:00+00:00",
         updated_at="2026-06-10T00:00:00+00:00",
     )
+
+
+def test_supports_temperature_guards_newer_models() -> None:
+    assert supports_temperature("claude-haiku-4-5")
+    assert supports_temperature("claude-sonnet-4-6")
+    assert not supports_temperature("claude-opus-4-7")
+    assert not supports_temperature("claude-opus-4-8")
+    assert not supports_temperature("claude-fable-5")
+
+
+@pytest.mark.parametrize(
+    ("model", "expects_temperature"),
+    [("claude-haiku-4-5", True), ("claude-opus-4-8", False)],
+)
+def test_score_client_omits_temperature_for_newer_models(
+    model: str,
+    expects_temperature: bool,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeMessages:
+        def create(self, **kwargs: object) -> object:
+            captured.update(kwargs)
+            payload = [
+                {
+                    "id": 1,
+                    "category": "tools",
+                    "relevance": 8,
+                    "reason": "Practical impact.",
+                }
+            ]
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(type="text", text=json.dumps(payload))
+                ]
+            )
+
+    client = AnthropicScoreClient(
+        "test-key",
+        model,
+        client=SimpleNamespace(messages=FakeMessages()),
+    )
+    client.score_batch([_item(title="Useful AI tool")], "# Profile")
+
+    assert ("temperature" in captured) is expects_temperature
