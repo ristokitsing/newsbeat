@@ -22,14 +22,6 @@ from newsbeat_digest.sources.base import HttpClient
 CONTENT: BriefContent = {
     "what_happened": "A lab released a model. It published benchmark details.",
     "why_it_matters": "The release may improve local workflows. The claims need independent testing.",
-    "linkedin_angle": {
-        "hook": "A useful release is more than a benchmark.",
-        "points": ["Capability", "Cost", "Practical use"],
-    },
-    "instagram_carousel": {
-        "slides": ["Release", "What changed", "Who benefits", "What to verify"],
-        "cta": "Which workflow would you test?",
-    },
     "caution": "Only the publisher's evidence is currently available.",
 }
 
@@ -86,34 +78,41 @@ def test_generate_briefs_persists_validated_content(
     published = database.list_published_items(include_briefed=True)
     assert len(published) == 1
     assert published[0].item.status is ItemStatus.BRIEFED
-    assert published[0].brief.linkedin_points == tuple(
-        CONTENT["linkedin_angle"]["points"]
-    )
+    brief = published[0].brief
+    assert brief.what_happened == CONTENT["what_happened"]
+    assert brief.caution == CONTENT["caution"]
+    # Summary-only briefs leave the social drafts unset; the app fills them in.
+    assert brief.linkedin_hook is None
+    assert brief.linkedin_points is None
+    assert brief.instagram_slides is None
+    assert brief.instagram_cta is None
 
 
-def test_brief_validation_rejects_wrong_slide_count() -> None:
+def test_brief_validation_rejects_legacy_social_fields() -> None:
     invalid = {
         **CONTENT,
-        "instagram_carousel": {
-            "slides": ["Only one"],
-            "cta": "Test it",
+        "linkedin_angle": {
+            "hook": "Old shape",
+            "points": ["One", "Two", "Three"],
         },
     }
 
-    with pytest.raises(ValueError, match="exactly 4"):
+    with pytest.raises(ValueError, match="missing or unexpected fields"):
         validate_brief_content(invalid)
 
 
-def test_anthropic_brief_schema_leaves_lengths_to_local_validation() -> None:
-    linked_in = BRIEF_SCHEMA["properties"]["linkedin_angle"]
-    instagram = BRIEF_SCHEMA["properties"]["instagram_carousel"]
-    points = linked_in["properties"]["points"]
-    slides = instagram["properties"]["slides"]
-
-    assert "minItems" not in points
-    assert "maxItems" not in points
-    assert "minItems" not in slides
-    assert "maxItems" not in slides
+def test_anthropic_brief_schema_is_summary_only() -> None:
+    assert set(BRIEF_SCHEMA["properties"]) == {
+        "what_happened",
+        "why_it_matters",
+        "caution",
+    }
+    assert BRIEF_SCHEMA["required"] == [
+        "what_happened",
+        "why_it_matters",
+        "caution",
+    ]
+    assert BRIEF_SCHEMA["additionalProperties"] is False
 
 
 def test_article_failure_falls_back_and_does_not_block_brief(

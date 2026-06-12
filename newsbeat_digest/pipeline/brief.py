@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from anthropic import Anthropic
@@ -15,54 +15,23 @@ from newsbeat_digest.config import Settings
 from newsbeat_digest.db import Database
 from newsbeat_digest.models import BriefContent, Item, ItemStatus
 from newsbeat_digest.pipeline.article import ArticleText, fetch_article_text
+from newsbeat_digest.pipeline.score import supports_temperature
 from newsbeat_digest.sources.base import HttpClient
 
 
+# The pipeline now produces a short factual summary only. LinkedIn and
+# Instagram drafts are generated on demand in the app.
 BRIEF_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
         "what_happened": {"type": "string"},
         "why_it_matters": {"type": "string"},
-        "linkedin_angle": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                "hook": {"type": "string"},
-                "points": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "Exactly three concise points. The application "
-                        "validates the array length."
-                    ),
-                },
-            },
-            "required": ["hook", "points"],
-        },
-        "instagram_carousel": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                "slides": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "Exactly four slide texts. The application validates "
-                        "the array length."
-                    ),
-                },
-                "cta": {"type": "string"},
-            },
-            "required": ["slides", "cta"],
-        },
         "caution": {"type": "string"},
     },
     "required": [
         "what_happened",
         "why_it_matters",
-        "linkedin_angle",
-        "instagram_carousel",
         "caution",
     ],
 }
@@ -90,14 +59,18 @@ class AnthropicBriefGenerator:
             try:
                 message = self._client.messages.create(
                     model=self._model,
-                    max_tokens=1_500,
-                    temperature=0,
+                    max_tokens=700,
                     output_config={
                         "format": {
                             "type": "json_schema",
                             "schema": BRIEF_SCHEMA,
                         }
                     },
+                    **(
+                        {"temperature": 0}
+                        if supports_temperature(self._model)
+                        else {}
+                    ),
                     system=(
                         "You create factual, concise AI news content briefs. "
                         "Use only the supplied source material. Never invent "
@@ -194,36 +167,14 @@ def validate_brief_content(value: object) -> BriefContent:
     required = {
         "what_happened",
         "why_it_matters",
-        "linkedin_angle",
-        "instagram_carousel",
         "caution",
     }
     if set(value) != required:
         raise ValueError("brief has missing or unexpected fields")
 
-    linked_in = _mapping(value["linkedin_angle"], "linkedin_angle")
-    instagram = _mapping(
-        value["instagram_carousel"],
-        "instagram_carousel",
-    )
-    if set(linked_in) != {"hook", "points"}:
-        raise ValueError("linkedin_angle has invalid fields")
-    if set(instagram) != {"slides", "cta"}:
-        raise ValueError("instagram_carousel has invalid fields")
-
-    points = _string_list(linked_in["points"], "linkedin points", length=3)
-    slides = _string_list(instagram["slides"], "instagram slides", length=4)
     result: BriefContent = {
         "what_happened": _text(value["what_happened"], "what_happened"),
         "why_it_matters": _text(value["why_it_matters"], "why_it_matters"),
-        "linkedin_angle": {
-            "hook": _text(linked_in["hook"], "linkedin hook"),
-            "points": points,
-        },
-        "instagram_carousel": {
-            "slides": slides,
-            "cta": _text(instagram["cta"], "instagram cta"),
-        },
         "caution": _text(value["caution"], "caution"),
     }
     return result
@@ -254,26 +205,12 @@ Source material:
 Requirements:
 - what_happened: two factual sentences.
 - why_it_matters: two or three useful sentences.
-- linkedin_angle: one hook and exactly three concise points.
-- instagram_carousel: exactly four slide texts and one CTA.
 - caution: one specific uncertainty, limitation, or source-quality warning.
 - Do not repeat unsupported claims from the title as established fact.
 """
-
-
-def _mapping(value: object, name: str) -> Mapping[str, object]:
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{name} must be an object")
-    return cast(Mapping[str, object], value)
 
 
 def _text(value: object, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return value.strip()
-
-
-def _string_list(value: object, name: str, *, length: int) -> list[str]:
-    if not isinstance(value, list) or len(value) != length:
-        raise ValueError(f"{name} must contain exactly {length} strings")
-    return [_text(entry, name) for entry in value]
