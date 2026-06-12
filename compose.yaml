@@ -18,11 +18,20 @@ services:
     mem_limit: 384m
     cpus: 0.5
     pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
     restart: "no"
 
   # Static delivery for backend-generated files; this is not an application API.
+  # Unprivileged nginx image: no root master, listens on 8080, writes pid and
+  # temp files under /tmp (see deploy/nginx.conf).
   static-feed:
-    image: nginx:1.29-alpine
+    image: nginxinc/nginx-unprivileged:1.29-alpine
     ports:
       - "127.0.0.1:8088:8080"
     volumes:
@@ -34,6 +43,9 @@ services:
     pids_limit: 32
     read_only: true
     tmpfs:
-      - /var/cache/nginx:size=8m
-      - /var/run:size=1m
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
     restart: unless-stopped
