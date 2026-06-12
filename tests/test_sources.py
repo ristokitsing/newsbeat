@@ -4,9 +4,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import pytest
 from newsbeat_digest.models import RawItem
 from newsbeat_digest.sources import fetch_all, load_sources
-from newsbeat_digest.sources.base import HttpClient, Source
+from newsbeat_digest.sources.base import (
+    MAX_RESPONSE_BYTES,
+    HttpClient,
+    ResponseTooLargeError,
+    Source,
+)
 from newsbeat_digest.sources.hn import HackerNewsSource
 from newsbeat_digest.sources.reddit import RedditSource
 from newsbeat_digest.sources.rss import RssSource
@@ -30,6 +36,35 @@ def test_http_client_retries_once() -> None:
 
     assert client.get_json("https://example.com") == {"ok": True}
     assert attempts == 2
+
+
+def test_http_client_rejects_oversized_response() -> None:
+    oversized = b"x" * (MAX_RESPONSE_BYTES + 1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=oversized, request=request)
+
+    client = _client(httpx.MockTransport(handler))
+
+    with pytest.raises(ResponseTooLargeError):
+        client.get("https://example.com/big")
+
+
+def test_http_client_returns_normal_body_unchanged() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"<html>ok</html>",
+            headers={"content-type": "text/html; charset=utf-8"},
+            request=request,
+        )
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.get("https://example.com/page")
+
+    assert response.status_code == 200
+    assert response.content == b"<html>ok</html>"
+    assert response.text == "<html>ok</html>"
 
 
 def test_hacker_news_prefers_original_story_url() -> None:
