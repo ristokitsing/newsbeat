@@ -50,10 +50,10 @@ CREATE TABLE IF NOT EXISTS briefs (
     item_id INTEGER NOT NULL,
     what_happened TEXT NOT NULL,
     why_it_matters TEXT NOT NULL,
-    linkedin_hook TEXT NOT NULL,
-    linkedin_points_json TEXT NOT NULL,
-    instagram_slides_json TEXT NOT NULL,
-    instagram_cta TEXT NOT NULL,
+    linkedin_hook TEXT,
+    linkedin_points_json TEXT,
+    instagram_slides_json TEXT,
+    instagram_cta TEXT,
     caution TEXT NOT NULL,
     digest_date TEXT NOT NULL,
     digest_slot TEXT NOT NULL,
@@ -102,6 +102,7 @@ class Database:
     def initialize(self) -> None:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
+            _migrate(connection)
 
     def insert_item(
         self,
@@ -307,6 +308,20 @@ class Database:
             ).fetchone()
             if selected is None:
                 return None
+            linkedin = content.get("linkedin_angle")
+            instagram = content.get("instagram_carousel")
+            linkedin_hook = linkedin["hook"] if linkedin is not None else None
+            linkedin_points_json = (
+                json.dumps(linkedin["points"], ensure_ascii=False)
+                if linkedin is not None
+                else None
+            )
+            instagram_slides_json = (
+                json.dumps(instagram["slides"], ensure_ascii=False)
+                if instagram is not None
+                else None
+            )
+            instagram_cta = instagram["cta"] if instagram is not None else None
             cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO briefs (
@@ -328,16 +343,10 @@ class Database:
                     item_id,
                     content["what_happened"],
                     content["why_it_matters"],
-                    content["linkedin_angle"]["hook"],
-                    json.dumps(
-                        content["linkedin_angle"]["points"],
-                        ensure_ascii=False,
-                    ),
-                    json.dumps(
-                        content["instagram_carousel"]["slides"],
-                        ensure_ascii=False,
-                    ),
-                    content["instagram_carousel"]["cta"],
+                    linkedin_hook,
+                    linkedin_points_json,
+                    instagram_slides_json,
+                    instagram_cta,
                     content["caution"],
                     digest_date.isoformat(),
                     digest_slot,
@@ -450,6 +459,79 @@ class Database:
         return delivered_count
 
 
+USER_VERSION = 1
+
+
+def _migrate(connection: sqlite3.Connection) -> None:
+    """Bring an existing database up to the current schema version.
+
+    Version 1 makes the four social columns on ``briefs`` nullable so the
+    pipeline can store summary-only briefs (LinkedIn/Instagram drafts are now
+    generated on demand in the app). New databases already match the nullable
+    schema, so only pre-existing ``NOT NULL`` tables need a rebuild.
+    """
+    version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+    if version < 1:
+        if _briefs_social_columns_not_null(connection):
+            _rebuild_briefs_nullable(connection)
+        # PRAGMA does not accept bound parameters; the value is a constant.
+        connection.execute(f"PRAGMA user_version = {USER_VERSION}")
+
+
+def _briefs_social_columns_not_null(connection: sqlite3.Connection) -> bool:
+    rows = connection.execute("PRAGMA table_info(briefs)").fetchall()
+    for row in rows:
+        if row["name"] == "linkedin_hook":
+            return bool(row["notnull"])
+    return False
+
+
+def _rebuild_briefs_nullable(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE briefs_new (
+            id INTEGER PRIMARY KEY,
+            item_id INTEGER NOT NULL,
+            what_happened TEXT NOT NULL,
+            why_it_matters TEXT NOT NULL,
+            linkedin_hook TEXT,
+            linkedin_points_json TEXT,
+            instagram_slides_json TEXT,
+            instagram_cta TEXT,
+            caution TEXT NOT NULL,
+            digest_date TEXT NOT NULL,
+            digest_slot TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(item_id) REFERENCES items(id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO briefs_new (
+            id, item_id, what_happened, why_it_matters, linkedin_hook,
+            linkedin_points_json, instagram_slides_json, instagram_cta,
+            caution, digest_date, digest_slot, created_at
+        )
+        SELECT
+            id, item_id, what_happened, why_it_matters, linkedin_hook,
+            linkedin_points_json, instagram_slides_json, instagram_cta,
+            caution, digest_date, digest_slot, created_at
+        FROM briefs
+        """
+    )
+    connection.execute("DROP TABLE briefs")
+    connection.execute("ALTER TABLE briefs_new RENAME TO briefs")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_briefs_digest_date"
+        " ON briefs(digest_date)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_briefs_item_id"
+        " ON briefs(item_id)"
+    )
+
+
 def _row_to_item(row: sqlite3.Row) -> Item:
     return Item(
         id=int(row["id"]),
@@ -474,6 +556,16 @@ def _row_to_item(row: sqlite3.Row) -> Item:
 
 
 def _row_to_published_item(row: sqlite3.Row) -> PublishedItem:
+    linkedin_points = (
+        tuple(json.loads(row["linkedin_points_json"]))
+        if row["linkedin_points_json"] is not None
+        else None
+    )
+    instagram_slides = (
+        tuple(json.loads(row["instagram_slides_json"]))
+        if row["instagram_slides_json"] is not None
+        else None
+    )
     return PublishedItem(
         item=_row_to_item(row),
         brief=Brief(
@@ -481,10 +573,10 @@ def _row_to_published_item(row: sqlite3.Row) -> PublishedItem:
             item_id=int(row["brief_item_id"]),
             what_happened=str(row["what_happened"]),
             why_it_matters=str(row["why_it_matters"]),
-            linkedin_hook=str(row["linkedin_hook"]),
-            linkedin_points=tuple(json.loads(row["linkedin_points_json"])),
-            instagram_slides=tuple(json.loads(row["instagram_slides_json"])),
-            instagram_cta=str(row["instagram_cta"]),
+            linkedin_hook=row["linkedin_hook"],
+            linkedin_points=linkedin_points,
+            instagram_slides=instagram_slides,
+            instagram_cta=row["instagram_cta"],
             caution=str(row["caution"]),
             digest_date=str(row["digest_date"]),
             digest_slot=str(row["digest_slot"]),
